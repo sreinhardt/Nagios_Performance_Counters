@@ -9,24 +9,26 @@
 
 # Send to: http://support.nagios.com/forum/viewtopic.php?t=26199#92717
 
-# TODO:
-# Filter all input for |, `, `n, and ;
+# Defualt settings for warning\crit strings. Need to see if I can leave them blank unless set and verify if they exist instead of default valules
+[String]$DefaultString = "ABCD123"
+[Int]$DefaultInt = -99
 
 # Counter "struct" to store values in a single object as we progress through the script and functions. (far easier to 
 # pass function to function, and it's not c so no pointers afaik)
 $CounterStruct = @{}
     [string]$CounterStruct.Hostname = ""
     [string]$CounterStruct.Counter = ""
+    [string]$CounterStruct.Label = ""
     [int]$CounterStruct.Time = "1"
     [Int]$CounterStruct.ExitCode = 3
     [String]$CounterStruct.OutputString = "Critical: There was an error processing performance counter data"
-    [String]$CounterStruct.OkString = "ABCD123"
-    [String]$CounterStruct.WarnString = "ABCD123"
-    [String]$CounterStruct.CritString = "ABCD123"
-    [Int]$CounterStruct.WarnHigh = -99
-    [Int]$CounterStruct.CritHigh = -99
-    [Int]$CounterStruct.WarnLow = -99
-    [Int]$CounterStruct.CritLow = -99
+    [String]$CounterStruct.OkString = $DefaultString
+    [String]$CounterStruct.WarnString = $DefaultString
+    [String]$CounterStruct.CritString = $DefaultString
+    [Int]$CounterStruct.WarnHigh = $DefaultInt
+    [Int]$CounterStruct.CritHigh = $DefaultInt
+    [Int]$CounterStruct.WarnLow = $DefaultInt
+    [Int]$CounterStruct.CritLow = $DefaultInt
     $CounterStruct.Result 
 
 # Function to write output and exit properly per nagios guidelines.
@@ -43,7 +45,11 @@ Function Write-Output-Message {
         default { $Return.OutputString = "Unknown: Failed to process exit code"; Exit 3 }
     }
 
-    $Return.OutputString += "Counter $($Return.Counter.ToString()) returned results"
+    If ( $Return.Label -eq "" ) {
+        $Return.OutputString += "Counter $($Return.Counter.ToString()) returned results"
+    } Else {
+        $Return.OutputString += "$($Return.Label.ToString()) returned results"
+    }
     
     # Process result
     $Return.Result | ForEach-Object {
@@ -56,8 +62,16 @@ Function Write-Output-Message {
 
     $Return.Result | ForEach-Object {
 
+        # Handle counters or labels
+        If ( $Return.Label -eq "" ) {
+            $Return.OutputString += "`'Counter $c`'="
+        } Else {
+            $Return.OutputString += "`'$($Return.Label.ToString()) $c`'="
+        }
+
+        # Handle adding counter values and warn\crit values for perfdata
         If ( ($_.CookedValue.GetType().Name -eq "Int") -or ($_.CookedValue.GetType().Name -eq "Double") ) {
-            $Return.OutputString += "`'Counter$c`'=$($_.CookedValue.ToInt32($test));"
+            $Return.OutputString += "$($_.CookedValue.ToInt32($test));"
             
             If ($Return.WarnHigh.ToInt32($test) -ne -99) { $Return.OutputString += "$($Return.WarnHigh.ToInt32($test));" }
             ElseIf ($Return.WarnLow.ToInt32($test) -ne -99) { $Return.OutputString += "$($Return.WarnLow.ToInt32($test));" }
@@ -135,9 +149,6 @@ Function Get-ExitCode {
 
     Param ( [Parameter(Mandatory=$True)]$Return )
 
-    # Defualt settings for warning\crit strings. Need to see if I can leave them blank unless set and verify if they exist instead of default valules
-    [String]$DefaultString = "ABCD123"
-    [Int]$DefaultInt = -99
     [Boolean]$ExitSet = $false
     
     # Determine exit code by checking cooked values from counter
@@ -188,34 +199,33 @@ Function Get-ExitCode {
             #value.compareto($lesserVal) = 1 (value > lesserval)
             #value.compareto($equalVal) = 0 (value == equalval)
             #value.compareto($greaterVal) = -1 (value < greaterval)
-            # if we are lower than warnlow or higher than warn high, warn
-            If ( (($Return.WarnLow.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt32($test).CompareTo($Return.WarnLow) -le 0)) -or (($Return.WarnHigh.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt32($test).CompareTo($return.WarnHigh) -ge 0)) ) {
-                If ( $Return.ExitCode -lt 1 ) {
-                    $Return.ExitCode = 1
-                    $ExitSet = $true
-                }
-            } 
+
             # if we are lower than critlow or higher than crit high, crit
-            ElseIf ( (($Return.CritLow -ne $DefaultInt) -or ($_.CookedValue.ToInt32($test) -lt $Return.CritLow)) -and (($Return.CritHigh -ne $DefaultInt) -or ($Return.CritHigh -lt $_.CookedValue.ToInt32($test))) ) {
-                If ( $Return.ExitCode -lt 2 ) {
+            If ( (($Return.CritLow.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt32($test).CompareTo($Return.CritLow) -le 0)) -or (($Return.CritHigh.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt32($test).CompareTo($Return.CritHigh) -ge 0)) ) {
+                If ( $Return.ExitCode.ToInt32($test).CompareTo(2) -gt 0 ) {
                     $Return.ExitCode = 2
                     $ExitSet = $true
                 }
             }
+            # if we are lower than warnlow or higher than warn high, warn
+            ElseIf ( (($Return.WarnLow.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt32($test).CompareTo($Return.WarnLow) -le 0)) -or (($Return.WarnHigh.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt32($test).CompareTo($return.WarnHigh) -ge 0)) ) {
+                If ( $Return.ExitCode.ToInt32($test).CompareTo(1) -gt 0 ) {
+                    $Return.ExitCode = 1
+                    $ExitSet = $true
+                }
+            } 
             # if all thresholds are still default, OK
-            ElseIf ( ($Return.WarnLow -eq $DefaultInt) -and ($Return.WarnHigh -eq $DefaultInt) -and ($Return.CritLow -eq $DefaultInt) -and ($Return.CritHigh -eq $DefaultInt) ) {
+            ElseIf ( ($Return.WarnLow.CompareTo($DefaultInt) -eq 0) -and ($Return.WarnHigh.CompareTo($DefaultInt) -eq 0) -and ($Return.CritLow.CompareTo($DefaultInt) -eq 0) -and ($Return.CritHigh.CompareTo($DefaultInt) -eq 0) ) {
                 If ( $ExitSet -eq $false ) {
                     $Return.ExitCode = 0
                     $ExitSet = $true
                 }
             }
             # If none of these were caught, we must be within OK range, and not using default thresholds
-            Else {
-                If ( $ExitSet -eq $false ) {
-                    $Return.ExitCode = 0
-                    $ExitSet = $true
-                } 
-            }
+            ElseIf ( $ExitSet -eq $false ) {
+                $Return.ExitCode = 0
+                $ExitSet = $true
+            } 
 
         } # End ifelse for double\int
     } # End for loop on cooked counters
@@ -256,12 +266,14 @@ Function Process-Args {
         [Parameter(Mandatory=$True)]$Return
     )
 
+        If ( $Args.Count -lt 2 ) {
+            Write-Help
+        }
+
         For ( $i = 0; $i -lt $Args.count-1; $i++ ) {
             
             $CurrentArg = $Args[$i].ToString()
             $Value = $Args[$i+1]
-
-            write-host "beginning for $CurrentArg - $Value"
 
                 If ($CurrentArg -cmatch "-H") {
                     If (Check-Strings $Value) {
@@ -283,6 +295,16 @@ Function Process-Args {
                         $Return.Counter = $Value
                     }
                 }
+                ElseIf ($CurrentArg -cmatch "-l") {
+                    If (Check-Strings $Value) {
+                        $Return.Label = $Value
+                    }
+                }
+                ElseIf ($CurrentArg -match "--Label") {
+                    If (Check-Strings $Value) {
+                        $Return.Label = $Value
+                    }
+                }
                 ElseIf ($CurrentArg -cmatch "-t") { 
                     If (Check-Strings $Value) {
                         $Return.Time = $Value
@@ -298,8 +320,8 @@ Function Process-Args {
                         If ( $Value.GetType().Name -like "String" ) {
                             If ( $Value.Contains(":") ) {
                                 $Value = $Value.Split(":")
-                                $Return.WarnHigh = $Value[1]
-                                $Return.WarnLow = $Value[2]
+                                If (!$Value[0].Equals("")) { $Return.WarnLow = $Value[0].ToInt32($test) }
+                                If (!$Value[1].Equals("")) { $Return.WarnHigh = $Value[1].ToInt32($test) }
                             }
                             Else { $Return.WarnString = $Value }
                         }
@@ -313,8 +335,8 @@ Function Process-Args {
                         If ( $Value.GetType().Name -like "String" ) {
                             If ( $Value.Contains(":") ) {
                                 $Value = $Value.Split(":")
-                                $Return.WarnHigh = $Value[1]
-                                $Return.WarnLow = $Value[2]
+                                If (!$Value[0].Equals("")) { $Return.WarnLow = $Value[0].ToInt32($test) }
+                                If (!$Value[1].Equals("")) { $Return.WarnHigh = $Value[1].ToInt32($test) }
                             }
                             Else { $Return.WarnString = $Value }
                         }
@@ -328,8 +350,8 @@ Function Process-Args {
                         If ( $Value.GetType().Name -eq "String" ) {
                             If ( $Value.Contains(":") ) {
                                 $Value = $Value.Split(":")
-                                $Return.CritHigh = $Value[1]
-                                $Return.CritLow = $Value[2]
+                                If (!$Value[0].Equals("")) { $Return.CritLow = $Value[0] }
+                                If (!$Value[1].Equals("")) { $Return.CritHigh = $Value[1] }
                             }
                             Else { $Return.CritString = $Value }
                         }
@@ -343,8 +365,8 @@ Function Process-Args {
                         If ( $Value.GetType().Name -eq "String" ) {
                             If ( $Value.Contains(":") ) {
                                 $Value = $Value.Split(":")
-                                $Return.CritHigh = $Value[1]
-                                $Return.CritLow = $Value[2]
+                                If (!$Value[0].Equals("")) { $Return.CritLow = $Value[0] }
+                                If (!$Value[1].Equals("")) { $Return.CritHigh = $Value[1] }
                             }
                             Else { $Return.CritString = $Value }
                         }
@@ -369,6 +391,7 @@ Function Write-Help {
     Write-Output "Arguments:"
     write-output "`t-H | --Hostname ) Optional hostname of remote system."
     Write-Output "`t-n | --Counter-Name) Name of performance counter to collect."
+    Write-Output "`t-l | --Label) Name of label for counters, opposed to Counter[n], in output message"
     Write-Output "`t-t | --Time ) Time in seconds for sample interval."
     Write-Output "`t-w | --Warning ) Warning string or number to check against. Somewhat matches plugins threshold guidelines"
     Write-Output "`t-c | --Critial ) Critical string or number to check against. Somewhat matches plugins threshold guidelines"
