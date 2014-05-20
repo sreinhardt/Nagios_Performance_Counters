@@ -71,13 +71,13 @@ Function Write-Output-Message {
 
         # Handle adding counter values and warn\crit values for perfdata
         If ( ($_.CookedValue.GetType().Name -eq "Int") -or ($_.CookedValue.GetType().Name -eq "Double") ) {
-            $Return.OutputString += "$($_.CookedValue.ToInt32($test));"
+            $Return.OutputString += "$($_.CookedValue.ToInt64($test));"
             
-            If ($Return.WarnHigh.ToInt32($test) -ne -99) { $Return.OutputString += "$($Return.WarnHigh.ToInt32($test));" }
-            ElseIf ($Return.WarnLow.ToInt32($test) -ne -99) { $Return.OutputString += "$($Return.WarnLow.ToInt32($test));" }
+            If ($Return.WarnHigh.ToInt64($test) -ne -99) { $Return.OutputString += "$($Return.WarnHigh.ToInt64($test));" }
+            ElseIf ($Return.WarnLow.ToInt64($test) -ne -99) { $Return.OutputString += "$($Return.WarnLow.ToInt64($test));" }
             Else { $Return.OutputString += ";" }
 
-            If ($Return.CritHigh -ne -99) { $Return.OutputString += "$($Return.CritHigh.ToInt32($test));" }
+            If ($Return.CritHigh -ne -99) { $Return.OutputString += "$($Return.CritHigh.ToInt64($test));" }
             Else { $Return.OutputString += ";" }
 
             $Return.OutputString += "; "
@@ -201,15 +201,15 @@ Function Get-ExitCode {
             #value.compareto($greaterVal) = -1 (value < greaterval)
 
             # if we are lower than critlow or higher than crit high, crit
-            If ( (($Return.CritLow.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt32($test).CompareTo($Return.CritLow) -le 0)) -or (($Return.CritHigh.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt32($test).CompareTo($Return.CritHigh) -ge 0)) ) {
-                If ( $Return.ExitCode.ToInt32($test).CompareTo(2) -gt 0 ) {
+            If ( (($Return.CritLow.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt64($test).CompareTo($Return.CritLow) -le 0)) -or (($Return.CritHigh.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt64($test).CompareTo($Return.CritHigh) -ge 0)) ) {
+                If ( $Return.ExitCode.ToInt64($test).CompareTo(2) -gt 0 ) {
                     $Return.ExitCode = 2
                     $ExitSet = $true
                 }
             }
             # if we are lower than warnlow or higher than warn high, warn
-            ElseIf ( (($Return.WarnLow.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt32($test).CompareTo($Return.WarnLow) -le 0)) -or (($Return.WarnHigh.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt32($test).CompareTo($return.WarnHigh) -ge 0)) ) {
-                If ( $Return.ExitCode.ToInt32($test).CompareTo(1) -gt 0 ) {
+            ElseIf ( (($Return.WarnLow.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt64($test).CompareTo($Return.WarnLow) -le 0)) -or (($Return.WarnHigh.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt64($test).CompareTo($return.WarnHigh) -ge 0)) ) {
+                If ( $Return.ExitCode.ToInt64($test).CompareTo(1) -gt 0 ) {
                     $Return.ExitCode = 1
                     $ExitSet = $true
                 }
@@ -320,13 +320,13 @@ Function Process-Args {
                         If ( $Value.GetType().Name -like "String" ) {
                             If ( $Value.Contains(":") ) {
                                 $Value = $Value.Split(":")
-                                If (!$Value[0].Equals("")) { $Return.WarnLow = $Value[0].ToInt32($test) }
-                                If (!$Value[1].Equals("")) { $Return.WarnHigh = $Value[1].ToInt32($test) }
+                                If (!$Value[0].Equals("")) { $Return.WarnLow = $Value[0].ToInt64($test) }
+                                If (!$Value[1].Equals("")) { $Return.WarnHigh = $Value[1].ToInt64($test) }
                             }
                             Else { $Return.WarnString = $Value }
                         }
-                        ElseIf ( ($Value.GetType().Name -like "Int32" ) -or ($Value.GetType().Name -eq "Double") ) {
-                            $Return.WarnHigh = $Value.toInt32($test)
+                        ElseIf ( ($Value.GetType().Name -like "Int32" ) -or ($Value.GetType().Name -like "Int64" ) -or ($Value.GetType().Name -eq "Double") ) {
+                            $Return.WarnHigh = $Value.ToInt64($test)
                         }
                     }
                 }                
@@ -335,13 +335,13 @@ Function Process-Args {
                         If ( $Value.GetType().Name -like "String" ) {
                             If ( $Value.Contains(":") ) {
                                 $Value = $Value.Split(":")
-                                If (!$Value[0].Equals("")) { $Return.WarnLow = $Value[0].ToInt32($test) }
-                                If (!$Value[1].Equals("")) { $Return.WarnHigh = $Value[1].ToInt32($test) }
+                                If (!$Value[0].Equals("")) { $Return.WarnLow = $Value[0].ToInt64($test) }
+                                If (!$Value[1].Equals("")) { $Return.WarnHigh = $Value[1].ToInt64($test) }
                             }
                             Else { $Return.WarnString = $Value }
                         }
-                        ElseIf ( ($Value.GetType().Name -like "Int32" ) -or ($Value.GetType().Name -eq "Double") ) {
-                            $Return.WarnHigh = $Value.toInt32($test)
+                        ElseIf ( ($Value.GetType().Name -like "Int32" ) -or ($Value.GetType().Name -like "Int64" ) -or ($Value.GetType().Name -eq "Double") ) {
+                            $Return.WarnHigh = $Value.ToInt64($test)
                         }
                     }
                 }
@@ -355,8 +355,8 @@ Function Process-Args {
                             }
                             Else { $Return.CritString = $Value }
                         }
-                        ElseIf ( ($Value.GetType().Name -like "Int32" ) -or ($Value.GetType().Name -like "Double") ) {
-                            $Return.CritHigh = $Value.toInt32($test)
+                        ElseIf ( ($Value.GetType().Name -like "Int32" ) -or ($Value.GetType().Name -like "Int64" ) -or ($Value.GetType().Name -like "Double") ) {
+                            $Return.CritHigh = $Value.ToInt64($test)
                         }
                     }
                 }
@@ -370,8 +370,8 @@ Function Process-Args {
                             }
                             Else { $Return.CritString = $Value }
                         }
-                        ElseIf ( ($Value.GetType().Name -like "Int32" ) -or ($Value.GetType().Name -like "Double") ) {
-                            $Return.CritHigh = $Value.toInt32($test)
+                        ElseIf ( ($Value.GetType().Name -like "Int32" ) -or ($Value.GetType().Name -like "Int64" ) -or ($Value.GetType().Name -like "Double") ) {
+                            $Return.CritHigh = $Value.ToInt64($test)
                         }
                     }
                 }
@@ -388,6 +388,7 @@ Function Process-Args {
 Function Write-Help {
 
     Write-Output "Check-Performance-Counters.ps1:`n`tThis script is designed to check performance counters and return them in a nagios style output."
+    Write-Output "`tPresently this script only supports Powershell v3 and newer. Additions for older variants may be included in the future."
     Write-Output "Arguments:"
     write-output "`t-H | --Hostname ) Optional hostname of remote system."
     Write-Output "`t-n | --Counter-Name) Name of performance counter to collect."
@@ -408,7 +409,10 @@ Function Check-Performance-Counters {
         [Parameter(Mandatory=$True)]$Args,
         [Parameter(Mandatory=$True)]$CounterStruct
      )
-    
+
+    # If older than PS v3 write help and exit.
+    If ( $PSVersionTable.PSVersion.Major -lt 3 ) { Write-Help }
+
     # Process arguments and insert into counter struct
     $CounterStruct = Process-Args $Args $CounterStruct
 
