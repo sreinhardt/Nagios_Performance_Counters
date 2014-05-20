@@ -9,26 +9,30 @@
 
 # Send to: http://support.nagios.com/forum/viewtopic.php?t=26199#92717
 
-# Defualt settings for warning\crit strings. Need to see if I can leave them blank unless set and verify if they exist instead of default valules
+# Default settings for warning\crit strings. Need to see if I can leave them blank unless set and verify if they exist instead of default valules
 [String]$DefaultString = "ABCD123"
-[Int]$DefaultInt = -99
+[Int64]$DefaultInt = -99
+[Int64]$State_OK = 0
+[Int64]$State_Warn = 1
+[Int64]$State_Crit = 2
+[Int64]$State_Unknown = 3
 
 # Counter "struct" to store values in a single object as we progress through the script and functions. (far easier to 
 # pass function to function, and it's not c so no pointers afaik)
 $CounterStruct = @{}
-    [string]$CounterStruct.Hostname = ""
-    [string]$CounterStruct.Counter = ""
-    [string]$CounterStruct.Label = ""
-    [int]$CounterStruct.Time = "1"
-    [Int]$CounterStruct.ExitCode = 3
-    [String]$CounterStruct.OutputString = "Critical: There was an error processing performance counter data"
+    [String]$CounterStruct.Hostname = ""
+    [String]$CounterStruct.Counter = ""
+    [String]$CounterStruct.Label = ""
+    [Int]$CounterStruct.Time = 1
+    [Int64]$CounterStruct.ExitCode = $State_Unknown
+    [String]$CounterStruct.OutputString = "Unknown: There was an error processing performance counter data"
     [String]$CounterStruct.OkString = $DefaultString
     [String]$CounterStruct.WarnString = $DefaultString
     [String]$CounterStruct.CritString = $DefaultString
-    [Int]$CounterStruct.WarnHigh = $DefaultInt
-    [Int]$CounterStruct.CritHigh = $DefaultInt
-    [Int]$CounterStruct.WarnLow = $DefaultInt
-    [Int]$CounterStruct.CritLow = $DefaultInt
+    [Int64]$CounterStruct.WarnHigh = $DefaultInt.ToInt64($null)
+    [Int64]$CounterStruct.CritHigh = $DefaultInt.ToInt64($null)
+    [Int64]$CounterStruct.WarnLow = $DefaultInt.ToInt64($null)
+    [Int64]$CounterStruct.CritLow = $DefaultInt.ToInt64($null)
     $CounterStruct.Result 
 
 # Function to write output and exit properly per nagios guidelines.
@@ -42,7 +46,7 @@ Function Write-Output-Message {
         1 { $Return.OutputString = "Warning: " }
         2 { $Return.OutputString = "Critical: " }
         3 { $Return.OutputString = "Unknown: " }
-        default { $Return.OutputString = "Unknown: Failed to process exit code"; Exit 3 }
+        default { $Return.OutputString = "Unknown: Failed to process exit code"; Exit $State_Unknown }
     }
 
     If ( $Return.Label -eq "" ) {
@@ -71,13 +75,13 @@ Function Write-Output-Message {
 
         # Handle adding counter values and warn\crit values for perfdata
         If ( ($_.CookedValue.GetType().Name -eq "Int") -or ($_.CookedValue.GetType().Name -eq "Double") ) {
-            $Return.OutputString += "$($_.CookedValue.ToInt64($test));"
+            $Return.OutputString += "$($_.CookedValue.ToInt64($null));"
             
-            If ($Return.WarnHigh.ToInt64($test) -ne -99) { $Return.OutputString += "$($Return.WarnHigh.ToInt64($test));" }
-            ElseIf ($Return.WarnLow.ToInt64($test) -ne -99) { $Return.OutputString += "$($Return.WarnLow.ToInt64($test));" }
+            If ($Return.WarnHigh.ToInt64($null) -ne $DefaultInt) { $Return.OutputString += "$($Return.WarnHigh.ToInt64($null));" }
+            ElseIf ($Return.WarnLow.ToInt64($null) -ne $DefaultInt) { $Return.OutputString += "$($Return.WarnLow.ToInt64($null));" }
             Else { $Return.OutputString += ";" }
 
-            If ($Return.CritHigh -ne -99) { $Return.OutputString += "$($Return.CritHigh.ToInt64($test));" }
+            If ($Return.CritHigh -ne $DefaultInt) { $Return.OutputString += "$($Return.CritHigh.ToInt64($null));" }
             Else { $Return.OutputString += ";" }
 
             $Return.OutputString += "; "
@@ -164,29 +168,29 @@ Function Get-ExitCode {
             If ( ($Return.OkString -ne $DefaultString) -and ($_ -eq $Return.OkString) ) {
                 # Only need to check if exitset is not true, otherwise we may have warning or critical already set
                 If ( $ExitSet -eq $false ) {
-                    $Return.ExitCode = 0
+                    $Return.ExitCode = $State_OK
                     $ExitSet = $true
                 }
             } 
             # Check warning string
             ElseIf ( ($Return.WarnString -ne $DefaultString) -and ($_ -eq $Return.WarnString) ) {
                 # Check exitset and if so, check if greater than previously set code
-                If ($Return.ExitCode -lt 1) {
-                    $Return.ExitCode = 1
+                If ($Return.ExitCode -lt $State_Warn) {
+                    $Return.ExitCode = $State_Warn
                     $ExitSet = $true
                 }
             } 
             # Check critical string
             ElseIf ( ($Return.CritString -ne $DefaultString) -and ($_ -eq $Return.CritString) ) {
                 #Check exitset and if so, check if greater than previously set code
-                If ($Return.ExitCode -lt 2) {
-                    $Return.ExitCode = 2
+                If ($Return.ExitCode -lt $State_Crit) {
+                    $Return.ExitCode = $State_Crit
                     $ExitSet = $true
                 }
             } 
             #Else if no string is set for checking, and exitset is false
             ElseIf ( ($Return.OkString -eq $DefaultString) -and ($Return.WarnString -eq $DefaultString) -and ($Return.CritString -eq $DefaultString) -and ($ExitSet -eq $false) ) {
-                $Return.ExitCode = 0
+                $Return.ExitCode = $State_OK
                 $ExitSet = $true
             }
         } # end string statements and begin int\double statements
@@ -201,29 +205,29 @@ Function Get-ExitCode {
             #value.compareto($greaterVal) = -1 (value < greaterval)
 
             # if we are lower than critlow or higher than crit high, crit
-            If ( (($Return.CritLow.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt64($test).CompareTo($Return.CritLow) -le 0)) -or (($Return.CritHigh.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt64($test).CompareTo($Return.CritHigh) -ge 0)) ) {
-                If ( $Return.ExitCode.ToInt64($test).CompareTo(2) -gt 0 ) {
-                    $Return.ExitCode = 2
+            If ( (($Return.CritLow.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt64($null).CompareTo($Return.CritLow) -le 0)) -or (($Return.CritHigh.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt64($null).CompareTo($Return.CritHigh) -ge 0)) ) {
+                If ( (($Return.ExitCode.ToInt64($null).CompareTo($State_Crit) -gt 0) -and ($ExitSet -eq $true)) -or ($ExitSet -eq $false)  ) {
+                    $Return.ExitCode = $State_Crit
                     $ExitSet = $true
                 }
             }
             # if we are lower than warnlow or higher than warn high, warn
-            ElseIf ( (($Return.WarnLow.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt64($test).CompareTo($Return.WarnLow) -le 0)) -or (($Return.WarnHigh.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt64($test).CompareTo($return.WarnHigh) -ge 0)) ) {
-                If ( $Return.ExitCode.ToInt64($test).CompareTo(1) -gt 0 ) {
-                    $Return.ExitCode = 1
+            ElseIf ( (($Return.WarnLow.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt64($null).CompareTo($Return.WarnLow) -le 0)) -or (($Return.WarnHigh.CompareTo($DefaultInt) -ne 0) -and ($_.CookedValue.ToInt64($null).CompareTo($return.WarnHigh) -ge 0)) ) {
+                If ( (($Return.ExitCode.ToInt64($null).CompareTo($State_Warn) -gt 0) -and ($ExitSet -eq $true)) -or ($ExitSet -eq $false) ) {
+                    $Return.ExitCode = $State_Warn
                     $ExitSet = $true
                 }
             } 
             # if all thresholds are still default, OK
             ElseIf ( ($Return.WarnLow.CompareTo($DefaultInt) -eq 0) -and ($Return.WarnHigh.CompareTo($DefaultInt) -eq 0) -and ($Return.CritLow.CompareTo($DefaultInt) -eq 0) -and ($Return.CritHigh.CompareTo($DefaultInt) -eq 0) ) {
                 If ( $ExitSet -eq $false ) {
-                    $Return.ExitCode = 0
+                    $Return.ExitCode = $State_OK
                     $ExitSet = $true
                 }
             }
             # If none of these were caught, we must be within OK range, and not using default thresholds
             ElseIf ( $ExitSet -eq $false ) {
-                $Return.ExitCode = 0
+                $Return.ExitCode = $State_OK
                 $ExitSet = $true
             } 
 
@@ -249,7 +253,7 @@ Function Check-Strings {
 
         If ( $String.Contains("$_") ) {
             Write-Host "Unknown: String contains illegal characters."
-            Exit 3
+            Exit $State_Unknown
         }
 
     } # end for
@@ -320,13 +324,13 @@ Function Process-Args {
                         If ( $Value.GetType().Name -like "String" ) {
                             If ( $Value.Contains(":") ) {
                                 $Value = $Value.Split(":")
-                                If (!$Value[0].Equals("")) { $Return.WarnLow = $Value[0].ToInt64($test) }
-                                If (!$Value[1].Equals("")) { $Return.WarnHigh = $Value[1].ToInt64($test) }
+                                If (!$Value[0].Equals("")) { $Return.WarnLow = $Value[0].ToInt64($null) }
+                                If (!$Value[1].Equals("")) { $Return.WarnHigh = $Value[1].ToInt64($null) }
                             }
                             Else { $Return.WarnString = $Value }
                         }
                         ElseIf ( ($Value.GetType().Name -like "Int32" ) -or ($Value.GetType().Name -like "Int64" ) -or ($Value.GetType().Name -eq "Double") ) {
-                            $Return.WarnHigh = $Value.ToInt64($test)
+                            $Return.WarnHigh = $Value.ToInt64($null)
                         }
                     }
                 }                
@@ -335,13 +339,13 @@ Function Process-Args {
                         If ( $Value.GetType().Name -like "String" ) {
                             If ( $Value.Contains(":") ) {
                                 $Value = $Value.Split(":")
-                                If (!$Value[0].Equals("")) { $Return.WarnLow = $Value[0].ToInt64($test) }
-                                If (!$Value[1].Equals("")) { $Return.WarnHigh = $Value[1].ToInt64($test) }
+                                If (!$Value[0].Equals("")) { $Return.WarnLow = $Value[0].ToInt64($null) }
+                                If (!$Value[1].Equals("")) { $Return.WarnHigh = $Value[1].ToInt64($null) }
                             }
                             Else { $Return.WarnString = $Value }
                         }
                         ElseIf ( ($Value.GetType().Name -like "Int32" ) -or ($Value.GetType().Name -like "Int64" ) -or ($Value.GetType().Name -eq "Double") ) {
-                            $Return.WarnHigh = $Value.ToInt64($test)
+                            $Return.WarnHigh = $Value.ToInt64($null)
                         }
                     }
                 }
@@ -356,7 +360,7 @@ Function Process-Args {
                             Else { $Return.CritString = $Value }
                         }
                         ElseIf ( ($Value.GetType().Name -like "Int32" ) -or ($Value.GetType().Name -like "Int64" ) -or ($Value.GetType().Name -like "Double") ) {
-                            $Return.CritHigh = $Value.ToInt64($test)
+                            $Return.CritHigh = $Value.ToInt64($null)
                         }
                     }
                 }
@@ -371,7 +375,7 @@ Function Process-Args {
                             Else { $Return.CritString = $Value }
                         }
                         ElseIf ( ($Value.GetType().Name -like "Int32" ) -or ($Value.GetType().Name -like "Int64" ) -or ($Value.GetType().Name -like "Double") ) {
-                            $Return.CritHigh = $Value.ToInt64($test)
+                            $Return.CritHigh = $Value.ToInt64($null)
                         }
                     }
                 }
@@ -388,7 +392,7 @@ Function Process-Args {
 Function Write-Help {
 
     Write-Output "Check-Performance-Counters.ps1:`n`tThis script is designed to check performance counters and return them in a nagios style output."
-    Write-Output "`tPresently this script only supports Powershell v3 and newer. Additions for older variants may be included in the future."
+    Write-Output "`tPresently this script only supports Powershell v3 and newer. Additions for older variants may be included in the future.`n"
     Write-Output "Arguments:"
     write-output "`t-H | --Hostname ) Optional hostname of remote system."
     Write-Output "`t-n | --Counter-Name) Name of performance counter to collect."
@@ -425,7 +429,7 @@ Function Check-Performance-Counters {
 
     # If we somehow get here, something is wrong
     Write-Output "Unknown: Something happened with the script."
-    Exit 3
+    Exit $State_Unknown
 }
 
 # Execute main block
