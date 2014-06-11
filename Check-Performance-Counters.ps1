@@ -7,8 +7,6 @@
 # License GPLv2 -  I reserve the right to change the licensing at any time without prior notification, past versions maintain the licensing at that point in time.
 # I also extend all usage, duplication, and modification rights to Nagios Enterprises LLC, without the forceful inclusion of GPL licensing.
 
-# Send to: http://support.nagios.com/forum/viewtopic.php?t=26199#92717
-
 # Default settings for warning\crit strings. Need to see if I can leave them blank unless set and verify if they exist instead of default valules
 [String]$DefaultString = "ABCD123"
 [Int64]$DefaultInt = -99
